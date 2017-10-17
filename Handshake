@@ -1,0 +1,30 @@
+
+import java.nio.ByteBuffer;
+
+/**
+ * Message containing handshake information.
+ */
+
+public class Handshake extends Message
+{
+	private int peerID;
+
+	public Handshake(int peerID)
+	{
+		ByteBuffer buffer = ByteBuffer.allocate(32);
+		// First 18 bytes are "P2PFILESHARINGPROJ"
+		buffer.put( ("P2PFILESHARINGPROJ").getBytes() );
+		// 10 bytes of zeros 
+		buffer.put(ByteBuffer.allocate(10));
+		// Last four are the peer ID 
+		buffer.putInt(peerID);
+		
+		mssgContent = buffer.array();
+		this.peerID = peerID;
+	}
+
+	public int getPeerID()
+	{
+		return peerID;
+	}
+}

@@ -1,0 +1,200 @@
+
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.Socket;
+import java.nio.ByteBuffer;
+
+public class messageTools
+{
+	/**
+	 * Sends message to the designated peer.
+	 * @param socket ID of the peer to send the message to
+	 * @param message Message with payload to send
+	 */
+	private static void messageSend(DataOutputStream outStream, Message mssg)
+	{
+		synchronized(outStrem) {
+			try {
+				outStream.write(mssg.getBytes(), 0, message.getBytes().length);
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+	}
+
+	/**
+	 * Generates a message based on the data received
+	 * @param messageData The byte array received
+	 * @return The generated message
+	 */
+	public static Message messageReceive(DataInputStream inputStream)
+	{
+		synchronized (inputStream) {
+			try {
+			    byte[] header = new byte[18];
+			    inputStream.readFully(header);
+			    
+				if ( new String(header).equals("P2PFILESHARINGPROJ") )
+				{
+					ByteBuffer buffer = ByteBuffer.allocate(14);
+					inputStream.readFully(buffer.array());
+					
+					int peerID = buffer.getInt(10);
+		
+					return new Handshake(peerID);
+				}
+				else
+				{
+					ByteBuffer buffer = ByteBuffer.allocate(18);
+					buffer.put(header);
+					buffer.position(0); // reset position
+					int length = buffer.getInt();
+					byte messageType = buffer.get();
+					
+					// length includes type, so the remaining bytes are length - 1
+					byte[] payload = new byte[length - 1];
+					dis.readFully(payload);
+					
+					return new actualMessage(messageType, payload);
+				}
+			} catch (IOException e) {
+				e.printStackTrace();
+				PeerProcess.log.info("We had an error receiving a msg");
+				return null;
+			}
+		}
+	}
+
+	/**
+	 * Creates and sends a handshake message to the designated peer.
+	 * @param socket Socket of the peer FUCK MY LIFE
+	 * @param peerID ID of the sender to put in the message
+	 */
+	public static void handshake(DataOutputStream outStream, int peerID)
+	{
+		Message mssg = new Handshake( peerID );
+
+		messageSend(outStream, mssg);
+	}
+
+	/**
+	 * Creates and sends a choke message to the designated peer.
+	 * @param socket ID of the peer to send the message to
+	 */
+	public static void choke(DataOutputStream outStream)
+	{
+		Message mssg = new actualMessage( (byte)0, new byte[0] );
+
+		messageSend(outStream, mssg);
+	}
+
+	/**
+	 * Creates and sends an unchoke message to the designated peer.
+	 * @param socket ID of the peer to send the message to
+	 */
+	public static void unchoke(DataOutputStream outStream)
+	{
+		Message mssg = new actualMessage( (byte)1, new byte[0] );
+
+		messageSend(outStream, mssg);
+	}
+
+	/**
+	 * Creates and sends an interested message to the designated peer.
+	 * @param socket ID of the peer to send the message to
+	 */
+	public static void interested(DataOutputStream outStream)
+	{
+		Message messg = new actualMessage( (byte)2, new byte[0] );
+
+		messageSend(outStream, mssg);
+	}
+
+	/**
+	 * Creates and sends a not interested message to the designated peer.
+	 * @param socket ID of the peer to send the message to
+	 */
+	public static void notInterested(DataOutputStream outStream)
+	{
+		Message mssg = new actualMessage( (byte)3, new byte[0] );
+
+		messageSend(outStream, mssg);
+	}
+
+	/**
+	 * Sends a have message to the designated peer along with the index of the possesed piece
+	 * @param socket ID of the peer to send the message to
+	 * @param index Index of the possesed piece
+	 */
+	public static void have(DataOutputStream outStream, int index)
+	{
+		ByteBuffer buffer = ByteBuffer.allocate(4);
+		buffer.putInt(index);
+		Message mssg = new actualMessage( (byte)4, buffer.array() );
+
+		messageSend(outStream, mssg);
+	}
+
+	/**
+	 * Sends a bitfield message to the designated peer. To be sent after the handshake message
+	 * @param socket ID of the peer to send the message to
+	 * @param bitfield Bitfield of pieces possesed
+	 */
+	public static void bitfield(DataOutputStream outStream, byte[] bitfield)
+	{
+		Message mssg = new actualMessage( (byte)5, bitfield );
+
+		sendMessage(dos, mssg);
+	}
+
+	/**
+	 * Sends a request message to the designated peer along with the index of the desired piece
+	 * @param socket ID of the peer to send the message to
+	 * @param index Index of the desired piece
+	 */
+	public static void request(DataOutputStream outStream, int index)
+	{
+		// synchronize our access to the file pieces
+		synchronized(PeerProcess.fm.getPiece(index)) {
+			// check to see if another PeerConnection already requested the file piece
+			if (!PeerProcess.fm.getPiece(index).wasRequested()) {
+				// if it hasn't been requested, let's request it!
+				PeerProcess.fm.getPiece(index).setRequested();
+				
+				// let other threads know that we have requested it by removing from their interesting pieces
+				for (int i = 0; i < PeerProcess.connections.size(); i++){
+					synchronized(PeerProcess.connections.get(i).getInterestingPieces()) {
+						PeerProcess.connections.get(i).getInterestingPieces().remove(new Integer(index));
+					}
+				}
+				
+				ByteBuffer buffer = ByteBuffer.allocate(4);
+				buffer.putInt(index);
+				Message mssg = new actualMessage( (byte)6, buffer.array() );
+				
+				// send the request
+				messageSend(outStream, mssg);
+			}
+		}
+	}
+
+	/**
+	 * Sends a piece of the file to the designated peer.
+	 * @param socket ID of the peer to send the message to
+	 * @param index Index of the piece being sent
+	 * @param payload Piece of the file
+	 */
+	public static void piece(DataOutputStream outStream, int index, byte[] payload)
+	{
+		ByteBuffer buffer = ByteBuffer.allocate(payload.length + 4);
+		buffer.putInt(index);
+		buffer.put(payload);
+		Message mssg = new actualMessage( (byte)7, buffer.array() );
+
+		sendMessage(outStream, mssg);
+	}
+}
